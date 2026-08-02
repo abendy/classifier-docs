@@ -15,6 +15,43 @@ Files here are intentionally not committed.
 | 2026-04-20 | Task | [real-boundary-test-discipline](./tasks/real-boundary-test-discipline.md) | Process insight: unit tests must cross real resource boundaries, not placeholders | 🟢 Approved |
 | 2026-04-18 | Plan | [classification-service-foundation](./plans/2026-04-18-classification-service-foundation.md) | Standalone Python classification service with audit layer, service manifest, and multi-faceted classification pipeline | 🟡 In Progress |
 
+## Pending revisions
+
+### Reconcile classifier with 2026-04-26 platform decisions
+
+The 2026-04-18 foundation plan and the code shipped through Phase 2 predate a substantial revision of the dada.stream data model. The plan, the in-flight code, and the service manifest must be reconciled against:
+
+- **ADR-008** — Tags, topics, pages are one primitive (per-user). The classifier's curated-topics-vs-freeform-tags split collapses. There is one primitive: tags. A tag is "promoted" when it has a definition and (optionally) exemplars. The current `topics.yaml` becomes the user's initial promoted-tag set. There is no separate global topic taxonomy.
+- **ADR-009** — Status flavors and outcomes. The classifier does not produce or consume per-(user, content, tag-page) state. Outcomes (notes, highlights, etc.) are independent content envelopes; the classifier may classify them like any other content but does not generate them.
+- **ADR-010** — Content versioning. Classifications attach to content as a whole, not a specific version. The existing `reclassify-content` command covers re-classification on a new version.
+- **ADR-011** — Routing: filters and classifier coexist. Multi-tag output, minimum-one-promoted-tag floor, suggestions as a separate output, emit-time normalization, filters-then-classifier ordering.
+
+What needs to change:
+
+1. **Classification pipeline** — topic/subtopic/tags heads collapse into a single tag-application head over the user's full tag set, with promoted tags as preferred candidates and prototype embeddings.
+2. **Multi-tag output** — apply all relevant existing tags, not one. Routing-floor invariant: at least one promoted tag must end up applied (or escalate to low-confidence).
+3. **Tag suggestions** — separate output (with rationale + confidence), not auto-applied. Surface for user accept-and-promote / accept-as-unpromoted / dismiss.
+4. **Emit-time normalization** — lowercase + hyphenate + lemma at minimum; cosine-similarity over tag embeddings as a richer check. Prevent synonym sprawl (`react` vs `reactjs`).
+5. **Filter awareness** — read filter-applied tags from `classification.tags[]`, do not duplicate, contribute additional tags with `appliedBy = classifier:<model-version>`.
+6. **Event payload (`content-classified`)** — `tags: TagApplication[]` (with provenance + confidence; replaces both the old `tags: string[]` and `topicAssignments[]`); `suggestedTags: TagSuggestion[]` is new. See content-model.md amendments.
+7. **Service manifest** — capability and command descriptions that reference "topics" as a distinct concept reframe to tags / promoted-tags.
+8. **`topics.yaml`** — keep as the seed promoted-tag set; lifecycle (add/promote/merge) moves into the tag-graph model (see `tag-graph-model.md`).
+
+Plan-level affected sections in `2026-04-18-classification-service-foundation.md`: Goals/Non-goals (language shift), Classification pipeline (head collapse + multi-tag + floor), Event contract emitted payload, Service manifest, Topics-subtopics-tags section (whole reframe), Proposed additions to dada.stream (the topic/tag separation item is no longer needed; sentiment/intent and observability remain valid).
+
+Code-level reconciliation work needs its own pass against HEAD before a revised plan can be written — Phase 2 has shipped real code under the old assumptions.
+
+Cross-references:
+
+- `/platform/architecture/decisions/008-tags-topics-pages-one-primitive.md`
+- `/platform/architecture/decisions/009-status-flavors-and-outcomes.md`
+- `/platform/architecture/decisions/010-content-versioning.md`
+- `/platform/architecture/decisions/011-routing-filters-and-classifier.md`
+- `/platform/domains/tag-graph-model.md`
+- `/platform/domains/lens-model.md`
+- `/platform/domains/content-model.md` (Amendments section, 2026-04-26)
+- `/.project/plans/2026-04-26-consolidation-index.md` (canonical inventory; see also `/.project/archive/2026-04-26-bookshelf-metro-merge.md` for the discussion log that produced these decisions)
+
 ## Open Items
 
 Durable cross-session record of things not yet in code but worth
@@ -61,8 +98,8 @@ is the event/condition that should bring it back into scope.
 
 ## Status legend
 
-- 🔵 **Planned** — in queue, not started
-- 🟡 **In Progress** — actively being worked on
-- 🟢 **Approved** — approved, merged, or active as a standing rule
-- 🔴 **Deferred** — parked, not doing now
-- (no icon) **Complete** / **Implemented, partial**
+- 🗒️ **Planned** — in queue, not started
+- ❇️ **Active / In Progress** — actively being worked on
+- 👍 **Approved** — approved, merged, or active as a standing rule
+- ⏸️ **Paused / Deferred** — parked, not doing now
+- 🌟 **Complete** / **Implemented, partial**
